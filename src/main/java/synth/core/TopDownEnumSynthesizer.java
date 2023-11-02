@@ -2,6 +2,7 @@ package synth.core;
 
 import synth.cfg.CFG;
 import synth.cfg.NonTerminal;
+import synth.cfg.Terminal;
 
 import java.util.*;
 
@@ -27,9 +28,31 @@ public class TopDownEnumSynthesizer implements ISynthesizer {
             }
             workList.addAll(expand(cfg, ast));
         }
-        throw new RuntimeException("To be implemented");
+//        throw new RuntimeException("To be implemented");
+        return null;
+
     }
 
+    public ASTNode copyAST(ASTNode src) {
+        List<ASTNode> children = new ArrayList<>();
+        String rootName = src.getSymbol().getName();
+        for (ASTNode child : src.getChildren()) {
+            children.add(copyAST(child));
+        }
+        if (src.getSymbol().isTerminal()) {
+            return new ASTNode(new Terminal(rootName), children);
+        } else {
+            return new ASTNode(new NonTerminal(rootName), children);
+        }
+    }
+
+    public boolean checkLeaf(ASTNode node) {
+        return node.getChildren().isEmpty();
+    }
+
+    /**
+     * Replace non-terminal nodes once a time (non-terminal symbols must be leaf nodes)
+     */
     public List<ASTNode> expand(CFG cfg, ASTNode root) {
         return null;
     }
