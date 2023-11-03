@@ -2,9 +2,11 @@ package synth.core;
 
 import synth.cfg.CFG;
 import synth.cfg.NonTerminal;
+import synth.cfg.Production;
 import synth.cfg.Terminal;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class TopDownEnumSynthesizer implements ISynthesizer {
 
@@ -54,6 +56,56 @@ public class TopDownEnumSynthesizer implements ISynthesizer {
      * Replace non-terminal nodes once a time (non-terminal symbols must be leaf nodes)
      */
     public List<ASTNode> expand(CFG cfg, ASTNode root) {
+        ASTNode nodeToExpand = findNodeToExpand(root);
+        if (nodeToExpand == null) {
+            return new ArrayList<>();
+        }
+        List<Production> prods = cfg.getProductions((NonTerminal) nodeToExpand.getSymbol());
+        List<ASTNode> replaceList = new ArrayList<>();
+        for (Production prod : prods) {
+            List<ASTNode> children = prod.getArgumentSymbols().stream()
+                    .map(i -> new ASTNode(i, new ArrayList<>())).collect(Collectors.toList());
+            replaceList.add(new ASTNode(prod.getOperator(), children));
+        }
+        List<ASTNode> expanded = new ArrayList<>();
+        for (ASTNode rep : replaceList) {
+            ASTNode copy = copyAST(root);
+            ASTNode src = findNodeToExpand(copy);
+            expanded.add(replace(copy, src, rep));
+        }
+        return expanded;
+    }
+
+    public ASTNode replace(ASTNode root, ASTNode src, ASTNode dest) {
+        if (root == src) {
+            return dest;
+        }
+        for (int i = 0; i < root.getChildren().size(); ++i) {
+            ASTNode child = root.getChild(i);
+            ASTNode repSub = replace(child, src, dest);
+            if (repSub != child) {
+                root.getChildren().set(i, repSub);
+                break;
+            }
+        }
+        return root;
+    }
+
+    //null means no node to expand
+    public ASTNode findNodeToExpand(ASTNode root) {
+        if (checkLeaf(root)) {
+            if (root.getSymbol().isTerminal()) {
+                return null;
+            } else if (root.getSymbol().isNonTerminal()) {
+                return root;
+            }
+        }
+        for (ASTNode child : root.getChildren()) {
+            ASTNode exp = findNodeToExpand(child);
+            if (exp != null) {
+                return exp;
+            }
+        }
         return null;
     }
 
