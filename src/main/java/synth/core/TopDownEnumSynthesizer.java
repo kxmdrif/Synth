@@ -24,7 +24,7 @@ public class TopDownEnumSynthesizer implements ISynthesizer {
         workList.offer(start);
         while (!workList.isEmpty()) {
             ASTNode ast = workList.poll();
-            if (checkComplete(ast) && satisfy(cfg, ast, examples)) {
+            if (checkComplete(ast) && satisfy(ast, examples)) {
                 return new Program(ast);
             }
             workList.addAll(expand(cfg, ast));
@@ -119,7 +119,7 @@ public class TopDownEnumSynthesizer implements ISynthesizer {
 
     }
 
-    public boolean satisfy(CFG cfg, ASTNode root, List<Example> examples) {
+    public boolean satisfy(ASTNode root, List<Example> examples) {
         Program program = new Program(root);
         for (Example example : examples) {
             if (Interpreter.evaluate(program, example.getInput()) != example.getOutput()) {
