@@ -19,7 +19,6 @@ public class TopDownEnumSynthesizer implements ISynthesizer {
      */
     @Override
     public Program synthesize(CFG cfg, List<Example> examples) {
-        // TODO: implement this method
         ASTNode start = new ASTNode(new NonTerminal("E"), Collections.emptyList());
         Queue<ASTNode> workList = new ArrayDeque<>();
         workList.offer(start);
@@ -30,7 +29,6 @@ public class TopDownEnumSynthesizer implements ISynthesizer {
             }
             workList.addAll(expand(cfg, ast));
         }
-//        throw new RuntimeException("To be implemented");
         return null;
 
     }
