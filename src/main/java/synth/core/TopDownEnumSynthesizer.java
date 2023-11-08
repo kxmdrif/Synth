@@ -19,10 +19,14 @@ public class TopDownEnumSynthesizer implements ISynthesizer {
      */
     @Override
     public Program synthesize(CFG cfg, List<Example> examples) {
+        int MAX_CAPACITY = 5000000;
         ASTNode start = new ASTNode(new NonTerminal("E"), Collections.emptyList());
         Queue<ASTNode> workList = new ArrayDeque<>();
         workList.offer(start);
         while (!workList.isEmpty()) {
+            if (workList.size() > MAX_CAPACITY) {
+                return null;
+            }
             ASTNode ast = workList.poll();
             if (checkComplete(ast) && satisfy(ast, examples)) {
                 return new Program(ast);
