@@ -5,8 +5,6 @@
 #include <stdlib.h>
 
 
-size_t add(size_t left, size_t right);
-
-void hello(void);
+bool equal(const char *l, const char *r);
 
 const char *simplify(const char *s);

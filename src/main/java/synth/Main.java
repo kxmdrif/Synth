@@ -16,7 +16,9 @@ import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
-        System.out.println(Egg.simplify("(+ (* a b) (* a 0))"));
+        System.out.println(Egg.simplify("(+ a b)"));
+        System.out.println(Egg.simplify("(* b 1)"));
+        System.out.println(Egg.equal("(+ a a)", "(* 2 a)"));
         // String examplesFilePath = "examples.txt";
         String examplesFilePath = args[0];
         List<String> lines = FileUtils.readLinesFromFile(examplesFilePath);

@@ -34,7 +34,6 @@ fn make_rules() -> Vec<Rewrite<SimpleLanguage, ()>> {
     ]
 }
 
-
 #[no_mangle]
 pub unsafe extern "C" fn simplify(s: *const c_char) -> *const c_char {
     // parse the expression, the type annotation tells it which Language to use
@@ -49,8 +48,25 @@ pub unsafe extern "C" fn simplify(s: *const c_char) -> *const c_char {
 
     // use an Extractor to pick the best element of the root eclass
     let extractor = Extractor::new(&runner.egraph, AstSize);
-    let (best_cost, best) = extractor.find_best(root);
-    println!("Simplified {} to {} with cost {}", expr, best, best_cost);
+    let (_, best) = extractor.find_best(root);
+    // println!("Simplified {} to {} with cost {}", expr, best, best_cost);
     
     ManuallyDrop::new(CString::new(best.to_string()).unwrap()).as_ptr()
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn equal(l: *const c_char, r: *const c_char) -> bool {
+    
+    let l_expr: RecExpr<SimpleLanguage> = CStr::from_ptr(l).to_str().unwrap().parse().unwrap();
+    let r_expr: RecExpr<SimpleLanguage> = CStr::from_ptr(r).to_str().unwrap().parse().unwrap();
+
+    let mut runner = Runner::default().with_expr(&l_expr).with_expr(&r_expr).run(&make_rules());
+
+    let l_id = runner.egraph.add_expr(&l_expr);
+
+    let r_id = runner.egraph.add_expr(&r_expr);
+
+    l_id == r_id
+
+}
+
