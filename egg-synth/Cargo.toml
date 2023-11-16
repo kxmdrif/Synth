@@ -1,0 +1,13 @@
+[package]
+name = "egg-synth"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+libc = "0.2.0"
+egg = "0.9.5"
+
+
+[lib]
+crate-type = ["cdylib"]

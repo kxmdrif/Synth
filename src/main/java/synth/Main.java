@@ -2,23 +2,21 @@ package synth;
 
 import synth.cfg.CFG;
 import synth.cfg.NonTerminal;
+import synth.cfg.Production;
 import synth.cfg.Terminal;
 import synth.core.Example;
 import synth.core.ISynthesizer;
-import synth.cfg.Production;
 import synth.core.Program;
 import synth.core.TopDownEnumSynthesizer;
+import synth.egg.Egg;
 import synth.util.FileUtils;
 import synth.util.Parser;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
+        System.out.println(Egg.simplify("(+ (* a b) (* a 0))"));
         // String examplesFilePath = "examples.txt";
         String examplesFilePath = args[0];
         List<String> lines = FileUtils.readLinesFromFile(examplesFilePath);

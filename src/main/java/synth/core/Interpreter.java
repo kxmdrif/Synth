@@ -96,7 +96,7 @@ public class Interpreter {
     }
 
     public boolean evalAnd(ASTNode and) {
-        return evalPred(and.getChild(0)) && evalPred(and.getChild(1));
+        return evalPred(and.getChild(0)) || evalPred(and.getChild(1));
     }
 
     public boolean evalOr(ASTNode or) {
