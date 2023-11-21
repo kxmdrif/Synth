@@ -1,6 +1,5 @@
 package synth.core;
 
-import com.microsoft.z3.AST;
 import synth.cfg.CFG;
 import synth.cfg.Terminal;
 
@@ -22,11 +21,14 @@ public class OptimizedSynthesizer implements ISynthesizer {
         while (true) {
             growPred();
             growExpr();
-            for (ASTNode expr : exprList) {
+            for (int i = checkPtr; i < exprList.size(); ++i) {
+                ASTNode expr = exprList.get(i);
                 if (satisfy(expr, examples)) {
                     return new Program(expr);
                 }
             }
+            checkPtr = exprList.size();
+
         }
 //        return null;
     }
@@ -37,6 +39,7 @@ public class OptimizedSynthesizer implements ISynthesizer {
         this.examples = examples;
         this.exprList = new ArrayList<>();
         this.predList = new ArrayList<>();
+        this.checkPtr = 0;
         for (String start : this.starts) {
             ASTNode startSymbol = new ASTNode(new Terminal(start), Collections.emptyList());
             if (!checkExprExistsAndUpdateEqClass(startSymbol)) {
@@ -54,21 +57,45 @@ public class OptimizedSynthesizer implements ISynthesizer {
     private List<ASTNode> exprList;
     private List<ASTNode> predList;
     private final String[] starts = {"1", "2", "3", "x", "y", "z"};
+    private int checkPtr;
 
     // invoke secondly
     private void growExpr() {
         int exprSize = exprList.size();
         int predSize = predList.size();
         for (int i = 0; i < exprSize; ++i) {
-            for (int j = 0; j < exprSize; ++j) {
+            for (int j = i; j < exprSize; ++j) {
                 growExprByExpr(exprList.get(i), exprList.get(j));
             }
         }
+
         for (int i = 0; i < exprSize; ++i) {
-            for (int j = 0; j < exprSize; ++j) {
+            for (int j = i; j < exprSize; ++j) {
                 for (int k = 0; k < predSize; ++k) {
                     growExprByPred(predList.get(k), exprList.get(i), exprList.get(j));
                 }
+            }
+        }
+    }
+
+    //invoke firstly
+    //todo memorize the iter last time to avoid starting from 0
+    private void growPred() {
+        int exprSize = exprList.size();
+        for (int i = 0; i < exprSize; ++i) {
+            for (int j = i; j < exprSize; ++j) {
+                growPredByExpr(exprList.get(i), exprList.get(j));
+            }
+        }
+        // memorize size to avoid infinite loop as we change the list size
+        int predSize = predList.size();
+        for (int i = 0; i < predSize; ++i) {
+            growPredBy1Pred(predList.get(i));
+        }
+        for (int i = 0; i < predSize; ++i) {
+            //todo i or i + 1
+            for (int j = i; j < predSize; ++j) {
+                growPredBy2Pred(predList.get(i), predList.get(j));
             }
         }
     }
@@ -92,27 +119,6 @@ public class OptimizedSynthesizer implements ISynthesizer {
         for (ASTNode newExpr : newExprList) {
             if (!checkExprExistsAndUpdateEqClass(newExpr)) {
                 exprList.add(newExpr);
-            }
-        }
-    }
-
-    //invoke firstly
-    //todo memorize the iter last time to avoid starting from 0
-    private void growPred() {
-        int exprSize = exprList.size();
-        for (int i = 0; i < exprSize; ++i) {
-            for (int j = i + 1; j < exprSize; ++j) {
-                growPredByExpr(exprList.get(i), exprList.get(j));
-            }
-        }
-        // memorize size to avoid infinite loop as we change the list size
-        int predSize = predList.size();
-        for (int i = 0; i < predSize; ++i) {
-            growPredBy1Pred(predList.get(i));
-        }
-        for (int i = 0; i < predSize; ++i) {
-            for (int j = 0; j < predSize; ++j) {
-                growPredBy2Pred(predList.get(i), predList.get(j));
             }
         }
     }
