@@ -16,6 +16,16 @@ public class Interpreter {
         return interpreter.evalExpr(program.getRoot());
     }
 
+    public static int evaluateExpr(ASTNode expr, Map<String, Integer> environment) {
+        Interpreter interpreter = new Interpreter(environment);
+        return interpreter.evalExpr(expr);
+    }
+
+    public static boolean evaluatePred(ASTNode pred, Map<String, Integer> environment) {
+        Interpreter interpreter = new Interpreter(environment);
+        return interpreter.evalPred(pred);
+    }
+
     /**
      * mapping from all variable names to their values
      */

@@ -1,14 +1,13 @@
 package synth.core;
 
+import com.microsoft.z3.AST;
 import synth.cfg.CFG;
-import synth.cfg.NonTerminal;
-import synth.cfg.Production;
 import synth.cfg.Terminal;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class OptimizedSynthesizer implements ISynthesizer{
+public class OptimizedSynthesizer implements ISynthesizer {
 
     /**
      * Synthesize a program f(x, y, z) based on a context-free grammar and examples
@@ -19,111 +18,187 @@ public class OptimizedSynthesizer implements ISynthesizer{
      */
     @Override
     public Program synthesize(CFG cfg, List<Example> examples) {
-        int MAX_CAPACITY = 5000000;
-        ASTNode start = new ASTNode(new NonTerminal("E"), Collections.emptyList());
-        Queue<ASTNode> workList = new ArrayDeque<>();
-        workList.offer(start);
-        while (!workList.isEmpty()) {
-            if (workList.size() > MAX_CAPACITY) {
-                return null;
+        doInit(examples);
+        while (true) {
+            growPred();
+            growExpr();
+            for (ASTNode expr : exprList) {
+                if (satisfy(expr, examples)) {
+                    return new Program(expr);
+                }
             }
-            ASTNode ast = workList.poll();
-            if (checkComplete(ast) && satisfy(ast, examples)) {
-                return new Program(ast);
-            }
-            workList.addAll(expand(cfg, ast));
         }
-        return null;
-
+//        return null;
     }
 
-    public ASTNode copyAST(ASTNode src) {
-        List<ASTNode> children = new ArrayList<>();
-        String rootName = src.getSymbol().getName();
-        for (ASTNode child : src.getChildren()) {
-            children.add(copyAST(child));
+    private void doInit(List<Example> examples) {
+        this.exprEquivalentClass = new HashMap<>();
+        this.predEquivalentClass = new HashMap<>();
+        this.examples = examples;
+        this.exprList = new ArrayList<>();
+        this.predList = new ArrayList<>();
+        for (String start : this.starts) {
+            ASTNode startSymbol = new ASTNode(new Terminal(start), Collections.emptyList());
+            if (!checkExprExistsAndUpdateEqClass(startSymbol)) {
+                exprList.add(startSymbol);
+            }
         }
-        if (src.getSymbol().isTerminal()) {
-            return new ASTNode(new Terminal(rootName), children);
-        } else {
-            return new ASTNode(new NonTerminal(rootName), children);
-        }
-    }
-
-    public boolean checkLeaf(ASTNode node) {
-        return node.getChildren().isEmpty();
     }
 
     /**
-     * Replace non-terminal nodes once a time (non-terminal symbols must be leaf nodes)
+     * eval_example_1|eval_example_|...|eval_example_n -> AstNode
      */
-    public List<ASTNode> expand(CFG cfg, ASTNode root) {
-        ASTNode nodeToExpand = findNodeToExpand(root);
-        if (nodeToExpand == null) {
-            return new ArrayList<>();
-        }
-        List<Production> prods = cfg.getProductions((NonTerminal) nodeToExpand.getSymbol());
-        List<ASTNode> replaceList = new ArrayList<>();
-        for (Production prod : prods) {
-            List<ASTNode> children = prod.getArgumentSymbols().stream()
-                    .map(i -> new ASTNode(i, new ArrayList<>())).collect(Collectors.toList());
-            replaceList.add(new ASTNode(prod.getOperator(), children));
-        }
-        List<ASTNode> expanded = new ArrayList<>();
-        for (ASTNode rep : replaceList) {
-            ASTNode copy = copyAST(root);
-            ASTNode src = findNodeToExpand(copy);
-            expanded.add(replace(copy, src, rep));
-        }
-        return expanded;
-    }
+    private Map<String, ASTNode> exprEquivalentClass;
+    private Map<String, ASTNode> predEquivalentClass;
+    private List<Example> examples;
+    private List<ASTNode> exprList;
+    private List<ASTNode> predList;
+    private final String[] starts = {"1", "2", "3", "x", "y", "z"};
 
-    public ASTNode replace(ASTNode root, ASTNode src, ASTNode dest) {
-        if (root == src) {
-            return dest;
-        }
-        for (int i = 0; i < root.getChildren().size(); ++i) {
-            ASTNode child = root.getChild(i);
-            ASTNode repSub = replace(child, src, dest);
-            if (repSub != child) {
-                root.getChildren().set(i, repSub);
-                break;
+    // invoke secondly
+    private void growExpr() {
+        int exprSize = exprList.size();
+        int predSize = predList.size();
+        for (int i = 0; i < exprSize; ++i) {
+            for (int j = 0; j < exprSize; ++j) {
+                growExprByExpr(exprList.get(i), exprList.get(j));
             }
         }
-        return root;
-    }
-
-    //null means no node to expand
-    public ASTNode findNodeToExpand(ASTNode root) {
-        if (checkLeaf(root)) {
-            if (root.getSymbol().isTerminal()) {
-                return null;
-            } else if (root.getSymbol().isNonTerminal()) {
-                return root;
+        for (int i = 0; i < exprSize; ++i) {
+            for (int j = 0; j < exprSize; ++j) {
+                for (int k = 0; k < predSize; ++k) {
+                    growExprByPred(predList.get(k), exprList.get(i), exprList.get(j));
+                }
             }
         }
-        for (ASTNode child : root.getChildren()) {
-            ASTNode exp = findNodeToExpand(child);
-            if (exp != null) {
-                return exp;
-            }
-        }
-        return null;
     }
 
-    public boolean checkComplete(ASTNode root) {
-        if (root == null) return true;
-        if (root.getSymbol().isNonTerminal()) return false;
-        for (ASTNode child : root.getChildren()) {
-            if (!checkComplete(child)) {
-                return false;
+    private void growExprByExpr(ASTNode left, ASTNode right) {
+        String[] ops = {"Add", "Multiply"};
+        for (String op : ops) {
+            ASTNode newExpr = new ASTNode(new Terminal(op), List.of(left, right));
+            if (!checkExprExistsAndUpdateEqClass(newExpr)) {
+                exprList.add(newExpr);
             }
         }
-        return true;
-
     }
 
-    public boolean satisfy(ASTNode root, List<Example> examples) {
+    //todo temporary ignore Ite and use divide and conquer
+    private void growExprByPred(ASTNode pred, ASTNode left, ASTNode right) {
+        List<ASTNode> newExprList = List.of(
+                new ASTNode(new Terminal("Ite"), List.of(pred, left, right)),
+                new ASTNode(new Terminal("Ite"), List.of(pred, left, right))
+        );
+        for (ASTNode newExpr : newExprList) {
+            if (!checkExprExistsAndUpdateEqClass(newExpr)) {
+                exprList.add(newExpr);
+            }
+        }
+    }
+
+    //invoke firstly
+    //todo memorize the iter last time to avoid starting from 0
+    private void growPred() {
+        int exprSize = exprList.size();
+        for (int i = 0; i < exprSize; ++i) {
+            for (int j = i + 1; j < exprSize; ++j) {
+                growPredByExpr(exprList.get(i), exprList.get(j));
+            }
+        }
+        // memorize size to avoid infinite loop as we change the list size
+        int predSize = predList.size();
+        for (int i = 0; i < predSize; ++i) {
+            growPredBy1Pred(predList.get(i));
+        }
+        for (int i = 0; i < predSize; ++i) {
+            for (int j = 0; j < predSize; ++j) {
+                growPredBy2Pred(predList.get(i), predList.get(j));
+            }
+        }
+    }
+
+    private void growPredByExpr(ASTNode left, ASTNode right) {
+        // need copy or not? If later process does not modify, we do not need to copy to save space.
+        List<ASTNode> newPredList = List.of(
+                new ASTNode(new Terminal("Lt"), List.of(left, right)),
+                new ASTNode(new Terminal("Lt"), List.of(right, left)),
+                new ASTNode(new Terminal("Eq"), List.of(left, right))
+        );
+        for (ASTNode newPred : newPredList) {
+            if (!checkPredExistsAndUpdateEqClass(newPred)) {
+                predList.add(newPred);
+            }
+        }
+    }
+
+    private void growPredBy2Pred(ASTNode left, ASTNode right) {
+        String[] ops = {"And", "Or"};
+        for (String op : ops) {
+            ASTNode newPred = new ASTNode(new Terminal(op), List.of(left, right));
+            if (!checkPredExistsAndUpdateEqClass(newPred)) {
+                predList.add(newPred);
+            }
+        }
+    }
+
+    private void growPredBy1Pred(ASTNode pred) {
+        String[] ops = {"Not"};
+        for (String op : ops) {
+            ASTNode newPred = new ASTNode(new Terminal(op), List.of(pred));
+            if (!checkPredExistsAndUpdateEqClass(newPred)) {
+                predList.add(newPred);
+            }
+        }
+    }
+
+    /**
+     * @param expr
+     * @return true if contains and update the expr to the simpler one (based on size).
+     * false if not contains and add it to the map.
+     */
+    private boolean checkExprExistsAndUpdateEqClass(ASTNode expr) {
+        List<String> outputs = this.examples.stream()
+                .map(i -> Interpreter.evaluateExpr(expr, i.getInput()))
+                .map(i -> Integer.toString(i))
+                .collect(Collectors.toList());
+        String key = String.join("|", outputs);
+        if (this.exprEquivalentClass.containsKey(key)) {
+            ASTNode original = this.exprEquivalentClass.get(key);
+            if (expr.size() < original.size()) {
+                this.exprEquivalentClass.put(key, expr);
+            }
+            return true;
+        } else {
+            this.exprEquivalentClass.put(key, expr);
+            return false;
+        }
+    }
+
+    /**
+     * @param pred
+     * @return true if contains and update the pred to the simpler one (based on size).
+     * false if not contains and add it to the map.
+     */
+    private boolean checkPredExistsAndUpdateEqClass(ASTNode pred) {
+        List<String> outputs = this.examples.stream()
+                .map(i -> Interpreter.evaluatePred(pred, i.getInput()))
+                .map(i -> (i ? "1" : "0"))
+                .collect(Collectors.toList());
+        String key = String.join("|", outputs);
+        if (this.predEquivalentClass.containsKey(key)) {
+            ASTNode original = this.predEquivalentClass.get(key);
+            if (pred.size() < original.size()) {
+                this.predEquivalentClass.put(key, pred);
+            }
+            return true;
+        } else {
+            this.predEquivalentClass.put(key, pred);
+            return false;
+        }
+    }
+
+
+    private boolean satisfy(ASTNode root, List<Example> examples) {
         Program program = new Program(root);
         for (Example example : examples) {
             if (Interpreter.evaluate(program, example.getInput()) != example.getOutput()) {
@@ -132,5 +207,4 @@ public class OptimizedSynthesizer implements ISynthesizer{
         }
         return true;
     }
-
 }

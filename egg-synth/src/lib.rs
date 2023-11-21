@@ -18,19 +18,26 @@ unsafe fn ptr_to_string(ptr: *const c_char) -> String {
 define_language! {
     enum SimpleLanguage {
         Num(i32),
-        "+" = Add([Id; 2]),
-        "*" = Mul([Id; 2]),
+        Bool(bool),
+        "Not" = Mul([Id; 2]),
+        "Add" = Add([Id; 2]),
+        "Multiply" = Mul([Id; 2]),
+        "Lt" = Add([Id; 2]),
+        "Eq" = Mul([Id; 2]),
+        "And" = Mul([Id; 2]),
+        "Or" = Mul([Id; 2]),
+        "Ite" = Mul([Id; 3]),
         Symbol(Symbol),
     }
 }
 
 fn make_rules() -> Vec<Rewrite<SimpleLanguage, ()>> {
     vec![
-        rewrite!("commute-add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
-        rewrite!("commute-mul"; "(* ?a ?b)" => "(* ?b ?a)"),
-        rewrite!("add-0"; "(+ ?a 0)" => "?a"),
-        rewrite!("mul-0"; "(* ?a 0)" => "0"),
-        rewrite!("mul-1"; "(* ?a 1)" => "?a"),
+        rewrite!("commute-add"; "(Add ?a ?b)" => "(Add ?b ?a)"),
+        rewrite!("commute-mul"; "(Multiply ?a ?b)" => "(Multiply ?b ?a)"),
+        rewrite!("add-0"; "(Add ?a 0)" => "?a"),
+        rewrite!("mul-0"; "(Multiply ?a 0)" => "0"),
+        rewrite!("mul-1"; "(Multiply ?a 1)" => "?a"),
     ]
 }
 

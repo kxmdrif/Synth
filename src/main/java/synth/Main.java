@@ -4,10 +4,7 @@ import synth.cfg.CFG;
 import synth.cfg.NonTerminal;
 import synth.cfg.Production;
 import synth.cfg.Terminal;
-import synth.core.Example;
-import synth.core.ISynthesizer;
-import synth.core.Program;
-import synth.core.TopDownEnumSynthesizer;
+import synth.core.*;
 import synth.egg.Egg;
 import synth.util.FileUtils;
 import synth.util.Parser;
@@ -23,7 +20,7 @@ public class Main {
         List<Example> examples = Parser.parseAllExamples(lines);
         // read the CFG
         CFG cfg = buildCFG();
-        ISynthesizer synthesizer = new TopDownEnumSynthesizer();
+        ISynthesizer synthesizer = new OptimizedSynthesizer();
         Program program = synthesizer.synthesize(cfg, examples);
         System.out.println(program);
 

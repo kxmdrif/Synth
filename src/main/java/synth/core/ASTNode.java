@@ -1,8 +1,11 @@
 package synth.core;
 
+import synth.cfg.NonTerminal;
 import synth.cfg.Symbol;
+import synth.cfg.Terminal;
 import synth.egg.Egg;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -64,19 +67,17 @@ public class ASTNode {
         return size;
      }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ASTNode astNode = (ASTNode) o;
-        return Egg.equal(this.toEggExpr(), astNode.toEggExpr());
-    }
-
-    // todo: more efficient
-    //  Not sure correct??
-    @Override
-    public int hashCode() {
-        return Egg.simplify(this.toEggExpr()).length();
+    public ASTNode copy() {
+        List<ASTNode> children = new ArrayList<>();
+        String rootName = this.getSymbol().getName();
+        for (ASTNode child : this.getChildren()) {
+            children.add(child.copy());
+        }
+        if (this.getSymbol().isTerminal()) {
+            return new ASTNode(new Terminal(rootName), children);
+        } else {
+            return new ASTNode(new NonTerminal(rootName), children);
+        }
     }
 
 }
