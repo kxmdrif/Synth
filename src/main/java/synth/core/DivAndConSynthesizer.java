@@ -17,18 +17,9 @@ public class DivAndConSynthesizer implements ISynthesizer {
      */
     @Override
     public Program synthesize(CFG cfg, List<Example> examples) {
-        doInit(cfg, examples);
-
-        // Check the initial exprList. New generated expr will be checked at once.
-        for (int i = 0; i < exprList.size(); ++i) {
-            ASTNode expr = exprList.get(i);
-            if (satisfy(expr)) {
-                return new Program(expr);
-            }
-            ASTNode divExpr = checkAndSynthesisDiv(expr);
-            if (divExpr != null) {
-                return new Program(divExpr);
-            }
+        ASTNode initResult = doInit(cfg, examples);
+        if (initResult != null) {
+            return new Program(initResult);
         }
 
         while (true) {
@@ -41,7 +32,7 @@ public class DivAndConSynthesizer implements ISynthesizer {
 //        return null;
     }
 
-    private void doInit(CFG cfg, List<Example> examples) {
+    private ASTNode doInit(CFG cfg, List<Example> examples) {
         this.exprEquivalentClass = new HashMap<>();
         this.predEquivalentClass = new HashMap<>();
         this.cfg = cfg;
@@ -53,20 +44,25 @@ public class DivAndConSynthesizer implements ISynthesizer {
         this.growPredBy1PredPtrMax = new int[]{0};
         this.growPredBy2PredPtrMax = new int[]{0, 0};
 
-
         for (String start : this.starts) {
             ASTNode startSymbol = new ASTNode(new Terminal(start), Collections.emptyList());
-            if (!checkExprExistsAndUpdateEqClass(startSymbol)) {
-                exprList.add(startSymbol);
+            if (satisfy(startSymbol)) {
+                return startSymbol;
             }
+            ASTNode divExpr = checkAndSynthesisDiv(startSymbol);
+            if (divExpr != null) {
+                return divExpr;
+            }
+            checkAndAddExpr(startSymbol);
         }
+        return null;
     }
 
     /**
-     * eval_example_1|eval_example_|...|eval_example_n -> AstNode
+     * eval_example_1|eval_example_|...|eval_example_n -> Index Of AstNode
      */
-    private Map<String, ASTNode> exprEquivalentClass;
-    private Map<String, ASTNode> predEquivalentClass;
+    private Map<String, Integer> exprEquivalentClass;
+    private Map<String, Integer> predEquivalentClass;
     private CFG cfg;
     private List<Example> examples;
     private List<ASTNode> exprList;
@@ -141,9 +137,7 @@ public class DivAndConSynthesizer implements ISynthesizer {
             if (divExpr != null) {
                 return divExpr;
             }
-            if (!checkExprExistsAndUpdateEqClass(newExpr)) {
-                exprList.add(newExpr);
-            }
+            checkAndAddExpr(newExpr);
         }
         return null;
     }
@@ -223,9 +217,7 @@ public class DivAndConSynthesizer implements ISynthesizer {
                 new ASTNode(new Terminal("Eq"), List.of(left, right))
         );
         for (ASTNode newPred : newPredList) {
-            if (!checkPredExistsAndUpdateEqClass(newPred)) {
-                predList.add(newPred);
-            }
+            checkAndAddPred(newPred);
         }
     }
 
@@ -233,9 +225,7 @@ public class DivAndConSynthesizer implements ISynthesizer {
         String[] ops = {"And", "Or"};
         for (String op : ops) {
             ASTNode newPred = new ASTNode(new Terminal(op), List.of(left, right));
-            if (!checkPredExistsAndUpdateEqClass(newPred)) {
-                predList.add(newPred);
-            }
+            checkAndAddPred(newPred);
         }
     }
 
@@ -243,55 +233,47 @@ public class DivAndConSynthesizer implements ISynthesizer {
         String[] ops = {"Not"};
         for (String op : ops) {
             ASTNode newPred = new ASTNode(new Terminal(op), List.of(pred));
-            if (!checkPredExistsAndUpdateEqClass(newPred)) {
-                predList.add(newPred);
-            }
+            checkAndAddPred(newPred);
         }
     }
 
     /**
-     * @param expr
-     * @return true if contains and update the expr to the simpler one (based on size).
-     * false if not contains and add it to the map.
+     * @param expr expression
      */
-    private boolean checkExprExistsAndUpdateEqClass(ASTNode expr) {
+    private void checkAndAddExpr(ASTNode expr) {
         List<String> outputs = this.examples.stream()
                 .map(i -> Interpreter.evaluateExpr(expr, i.getInput()))
                 .map(i -> Integer.toString(i))
                 .collect(Collectors.toList());
         String key = String.join("|", outputs);
         if (this.exprEquivalentClass.containsKey(key)) {
-            ASTNode original = this.exprEquivalentClass.get(key);
-            if (expr.size() < original.size()) {
-                this.exprEquivalentClass.put(key, expr);
+            int originalIdx = this.exprEquivalentClass.get(key);
+            if (expr.size() < this.exprList.get(originalIdx).size()) {
+                this.exprList.set(originalIdx, expr);
             }
-            return true;
         } else {
-            this.exprEquivalentClass.put(key, expr);
-            return false;
+            this.exprEquivalentClass.put(key, this.exprList.size());
+            this.exprList.add(expr);
         }
     }
 
     /**
-     * @param pred
-     * @return true if contains and update the pred to the simpler one (based on size).
-     * false if not contains and add it to the map.
+     * @param pred predicate
      */
-    private boolean checkPredExistsAndUpdateEqClass(ASTNode pred) {
+    private void checkAndAddPred(ASTNode pred) {
         List<String> outputs = this.examples.stream()
                 .map(i -> Interpreter.evaluatePred(pred, i.getInput()))
                 .map(i -> (i ? "1" : "0"))
                 .collect(Collectors.toList());
         String key = String.join("|", outputs);
         if (this.predEquivalentClass.containsKey(key)) {
-            ASTNode original = this.predEquivalentClass.get(key);
-            if (pred.size() < original.size()) {
-                this.predEquivalentClass.put(key, pred);
+            int originalIdx = this.predEquivalentClass.get(key);
+            if (pred.size() < this.predList.get(originalIdx).size()) {
+                this.predList.set(originalIdx, pred);
             }
-            return true;
         } else {
-            this.predEquivalentClass.put(key, pred);
-            return false;
+            this.predEquivalentClass.put(key, this.predList.size());
+            this.predList.add(pred);
         }
     }
 
