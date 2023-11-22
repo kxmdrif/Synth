@@ -20,16 +20,22 @@ public class OptimizedSynthesizer implements ISynthesizer {
         doInit(examples);
         long timeLimitMs = 1000 * 120;
         final long startTime = System.currentTimeMillis();
+
+        // Check the initial exprList. New generated expr will be checked at once.
+        for (int i = checkPtr; i < exprList.size(); ++i) {
+            ASTNode expr = exprList.get(i);
+            if (satisfy(expr)) {
+                return new Program(expr);
+            }
+        }
+        checkPtr = exprList.size();
+
         while (true) {
             growPred();
-            growExpr();
-            for (int i = checkPtr; i < exprList.size(); ++i) {
-                ASTNode expr = exprList.get(i);
-                if (satisfy(expr, examples)) {
-                    return new Program(expr);
-                }
+            ASTNode result = growExpr();
+            if (result != null) {
+                return new Program(result);
             }
-            checkPtr = exprList.size();
             if (System.currentTimeMillis() - startTime > timeLimitMs) {
                 break;
             }
@@ -76,7 +82,7 @@ public class OptimizedSynthesizer implements ISynthesizer {
     private int[] growPredBy2PredPtrMax;
 
     // invoke secondly
-    private void growExpr() {
+    private ASTNode growExpr() {
         int exprSize = exprList.size();
         int predSize = predList.size();
         for (int i = 0; i < exprSize; ++i) {
@@ -84,7 +90,10 @@ public class OptimizedSynthesizer implements ISynthesizer {
                 if (i < growExprByExprPtrMax[0] && j < growExprByExprPtrMax[1]) {
                     continue;
                 }
-                growExprByExpr(exprList.get(i), exprList.get(j));
+                ASTNode result = growExprByExpr(exprList.get(i), exprList.get(j));
+                if (result != null) {
+                    return result;
+                }
             }
         }
         growExprByExprPtrMax[0] = growExprByExprPtrMax[1] = exprSize;
@@ -96,12 +105,16 @@ public class OptimizedSynthesizer implements ISynthesizer {
                     if (i < growExprByPredPtrMax[0] && j < growExprByPredPtrMax[1] && k < growExprByPredPtrMax[2]) {
                         continue;
                     }
-                    growExprByPred(predList.get(k), exprList.get(i), exprList.get(j));
+                    ASTNode result = growExprByPred(predList.get(k), exprList.get(i), exprList.get(j));
+                    if (result != null) {
+                        return result;
+                    }
                 }
             }
         }
         growExprByPredPtrMax[0] = growExprByPredPtrMax[1] = exprSize;
         growExprByPredPtrMax[2] = predSize;
+        return null;
     }
 
     //invoke firstly
@@ -139,27 +152,35 @@ public class OptimizedSynthesizer implements ISynthesizer {
         growPredBy2PredPtrMax[0] = growPredBy2PredPtrMax[1] = predSize;
     }
 
-    private void growExprByExpr(ASTNode left, ASTNode right) {
+    private ASTNode growExprByExpr(ASTNode left, ASTNode right) {
         String[] ops = {"Add", "Multiply"};
         for (String op : ops) {
             ASTNode newExpr = new ASTNode(new Terminal(op), List.of(left, right));
+            if (satisfy(newExpr)) {
+                return newExpr;
+            }
             if (!checkExprExistsAndUpdateEqClass(newExpr)) {
                 exprList.add(newExpr);
             }
         }
+        return null;
     }
 
     //todo temporary ignore Ite and use divide and conquer
-    private void growExprByPred(ASTNode pred, ASTNode left, ASTNode right) {
+    private ASTNode growExprByPred(ASTNode pred, ASTNode left, ASTNode right) {
         List<ASTNode> newExprList = List.of(
                 new ASTNode(new Terminal("Ite"), List.of(pred, left, right)),
                 new ASTNode(new Terminal("Ite"), List.of(pred, right, left))
         );
         for (ASTNode newExpr : newExprList) {
+            if (satisfy(newExpr)) {
+                return newExpr;
+            }
             if (!checkExprExistsAndUpdateEqClass(newExpr)) {
                 exprList.add(newExpr);
             }
         }
+        return null;
     }
 
     private void growPredByExpr(ASTNode left, ASTNode right) {
@@ -243,10 +264,9 @@ public class OptimizedSynthesizer implements ISynthesizer {
     }
 
 
-    private boolean satisfy(ASTNode root, List<Example> examples) {
-        Program program = new Program(root);
-        for (Example example : examples) {
-            if (Interpreter.evaluate(program, example.getInput()) != example.getOutput()) {
+    private boolean satisfy(ASTNode root) {
+        for (Example example : this.examples) {
+            if (Interpreter.evaluateExpr(root, example.getInput()) != example.getOutput()) {
                 return false;
             }
         }
