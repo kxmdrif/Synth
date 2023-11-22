@@ -20,7 +20,7 @@ public class Main {
         List<Example> examples = Parser.parseAllExamples(lines);
         // read the CFG
         CFG cfg = buildCFG();
-        ISynthesizer synthesizer = new OptimizedSynthesizer();
+        ISynthesizer synthesizer = new DivAndConSynthesizer();
         Program program = synthesizer.synthesize(cfg, examples);
         System.out.println(program);
 

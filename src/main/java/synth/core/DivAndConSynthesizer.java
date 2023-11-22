@@ -6,7 +6,7 @@ import synth.cfg.Terminal;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class OptimizedSynthesizer implements ISynthesizer {
+public class DivAndConSynthesizer implements ISynthesizer {
 
     /**
      * Synthesize a program f(x, y, z) based on a context-free grammar and examples
@@ -17,18 +17,19 @@ public class OptimizedSynthesizer implements ISynthesizer {
      */
     @Override
     public Program synthesize(CFG cfg, List<Example> examples) {
-        doInit(examples);
-        long timeLimitMs = 1000 * 120;
-        final long startTime = System.currentTimeMillis();
+        doInit(cfg, examples);
 
         // Check the initial exprList. New generated expr will be checked at once.
-        for (int i = checkPtr; i < exprList.size(); ++i) {
+        for (int i = 0; i < exprList.size(); ++i) {
             ASTNode expr = exprList.get(i);
             if (satisfy(expr)) {
                 return new Program(expr);
             }
+            ASTNode divExpr = checkAndSynthesisDiv(expr);
+            if (divExpr != null) {
+                return new Program(divExpr);
+            }
         }
-        checkPtr = exprList.size();
 
         while (true) {
             growPred();
@@ -36,22 +37,18 @@ public class OptimizedSynthesizer implements ISynthesizer {
             if (result != null) {
                 return new Program(result);
             }
-            if (System.currentTimeMillis() - startTime > timeLimitMs) {
-                break;
-            }
         }
-        return null;
+//        return null;
     }
 
-    private void doInit(List<Example> examples) {
+    private void doInit(CFG cfg, List<Example> examples) {
         this.exprEquivalentClass = new HashMap<>();
         this.predEquivalentClass = new HashMap<>();
+        this.cfg = cfg;
         this.examples = examples;
         this.exprList = new ArrayList<>();
         this.predList = new ArrayList<>();
-        this.checkPtr = 0;
         this.growExprByExprPtrMax = new int[]{0, 0};
-        this.growExprByPredPtrMax = new int[]{0, 0, 0};
         this.growPredByExprPtrMax = new int[]{0, 0};
         this.growPredBy1PredPtrMax = new int[]{0};
         this.growPredBy2PredPtrMax = new int[]{0, 0};
@@ -70,13 +67,12 @@ public class OptimizedSynthesizer implements ISynthesizer {
      */
     private Map<String, ASTNode> exprEquivalentClass;
     private Map<String, ASTNode> predEquivalentClass;
+    private CFG cfg;
     private List<Example> examples;
     private List<ASTNode> exprList;
     private List<ASTNode> predList;
     private final String[] starts = {"1", "2", "3", "x", "y", "z"};
-    private int checkPtr;
     private int[] growExprByExprPtrMax;
-    private int[] growExprByPredPtrMax;
     private int[] growPredByExprPtrMax;
     private int[] growPredBy1PredPtrMax;
     private int[] growPredBy2PredPtrMax;
@@ -84,7 +80,6 @@ public class OptimizedSynthesizer implements ISynthesizer {
     // invoke secondly
     private ASTNode growExpr() {
         int exprSize = exprList.size();
-        int predSize = predList.size();
         for (int i = 0; i < exprSize; ++i) {
             for (int j = i; j < exprSize; ++j) {
                 if (i < growExprByExprPtrMax[0] && j < growExprByExprPtrMax[1]) {
@@ -97,23 +92,6 @@ public class OptimizedSynthesizer implements ISynthesizer {
             }
         }
         growExprByExprPtrMax[0] = growExprByExprPtrMax[1] = exprSize;
-
-        for (int i = 0; i < exprSize; ++i) {
-            // start from i + 1 because Ite(p, expr[i], expr[i]) = expr[i]
-            for (int j = i + 1; j < exprSize; ++j) {
-                for (int k = 0; k < predSize; ++k) {
-                    if (i < growExprByPredPtrMax[0] && j < growExprByPredPtrMax[1] && k < growExprByPredPtrMax[2]) {
-                        continue;
-                    }
-                    ASTNode result = growExprByPred(predList.get(k), exprList.get(i), exprList.get(j));
-                    if (result != null) {
-                        return result;
-                    }
-                }
-            }
-        }
-        growExprByPredPtrMax[0] = growExprByPredPtrMax[1] = exprSize;
-        growExprByPredPtrMax[2] = predSize;
         return null;
     }
 
@@ -159,6 +137,10 @@ public class OptimizedSynthesizer implements ISynthesizer {
             if (satisfy(newExpr)) {
                 return newExpr;
             }
+            ASTNode divExpr = checkAndSynthesisDiv(newExpr);
+            if (divExpr != null) {
+                return divExpr;
+            }
             if (!checkExprExistsAndUpdateEqClass(newExpr)) {
                 exprList.add(newExpr);
             }
@@ -166,21 +148,71 @@ public class OptimizedSynthesizer implements ISynthesizer {
         return null;
     }
 
-    //todo temporary ignore Ite and use divide and conquer
-    private ASTNode growExprByPred(ASTNode pred, ASTNode left, ASTNode right) {
-        List<ASTNode> newExprList = List.of(
-                new ASTNode(new Terminal("Ite"), List.of(pred, left, right)),
-                new ASTNode(new Terminal("Ite"), List.of(pred, right, left))
-        );
-        for (ASTNode newExpr : newExprList) {
-            if (satisfy(newExpr)) {
-                return newExpr;
+    private ASTNode checkAndSynthesisDiv(ASTNode expr) {
+        byte[] satBitMap = getSatExamples(expr);
+        if (!checkDiv(satBitMap)) {
+            return null;
+        }
+        ASTNode divPred = findDivPred(satBitMap);
+        if (divPred == null) {
+            return null;
+        }
+        List<Example> unSatExamples = new ArrayList<>();
+        for (int i = 0; i < satBitMap.length; ++i) {
+            if (satBitMap[i] == 0) {
+                unSatExamples.add(this.examples.get(i));
             }
-            if (!checkExprExistsAndUpdateEqClass(newExpr)) {
-                exprList.add(newExpr);
+        }
+        DivAndConSynthesizer divAndConSynthesizer = new DivAndConSynthesizer();
+        Program unSatPart = divAndConSynthesizer.synthesize(this.cfg, unSatExamples);
+        if (unSatPart == null) {
+            return null;
+        }
+        return new ASTNode(new Terminal("Ite"), List.of(
+                divPred,
+                expr,
+                unSatPart.getRoot()
+        ));
+    }
+
+    private ASTNode findDivPred(byte[] bitMap) {
+        for (ASTNode pred : this.predList) {
+            boolean canDiv = true;
+            for (int i = 0; i < bitMap.length; ++i) {
+                boolean satPred = Interpreter.evaluatePred(pred, this.examples.get(i).getInput());
+                byte sat = (byte) (satPred ? 1 : 0);
+                if (sat != bitMap[i]) {
+                    canDiv = false;
+                    break;
+                }
+            }
+            if (canDiv) {
+                return pred;
             }
         }
         return null;
+    }
+
+    private byte[] getSatExamples(ASTNode expr) {
+        byte[] bitMap = new byte[this.examples.size()];
+        for (int i = 0; i < this.examples.size(); ++i) {
+            Example example = examples.get(i);
+            if (Interpreter.evaluateExpr(expr, example.getInput()) == example.getOutput()) {
+                bitMap[i] = 1;
+            } else {
+                bitMap[i] = 0;
+            }
+        }
+        return bitMap;
+    }
+    private boolean checkDiv(byte[] bitMap) {
+        int count = 0;
+        for (byte b : bitMap) {
+            if (b == 1) {
+                ++count;
+            }
+        }
+        return count > bitMap.length / 2;
     }
 
     private void growPredByExpr(ASTNode left, ASTNode right) {
