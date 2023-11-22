@@ -18,6 +18,8 @@ public class OptimizedSynthesizer implements ISynthesizer {
     @Override
     public Program synthesize(CFG cfg, List<Example> examples) {
         doInit(examples);
+        long timeLimitMs = 1000 * 120;
+        final long startTime = System.currentTimeMillis();
         while (true) {
             growPred();
             growExpr();
@@ -28,9 +30,11 @@ public class OptimizedSynthesizer implements ISynthesizer {
                 }
             }
             checkPtr = exprList.size();
-
+            if (System.currentTimeMillis() - startTime > timeLimitMs) {
+                break;
+            }
         }
-//        return null;
+        return null;
     }
 
     private void doInit(List<Example> examples) {
@@ -40,6 +44,13 @@ public class OptimizedSynthesizer implements ISynthesizer {
         this.exprList = new ArrayList<>();
         this.predList = new ArrayList<>();
         this.checkPtr = 0;
+        this.growExprByExprPtrMax = new int[]{0, 0};
+        this.growExprByPredPtrMax = new int[]{0, 0, 0};
+        this.growPredByExprPtrMax = new int[]{0, 0};
+        this.growPredBy1PredPtrMax = new int[]{0};
+        this.growPredBy2PredPtrMax = new int[]{0, 0};
+
+
         for (String start : this.starts) {
             ASTNode startSymbol = new ASTNode(new Terminal(start), Collections.emptyList());
             if (!checkExprExistsAndUpdateEqClass(startSymbol)) {
@@ -58,6 +69,11 @@ public class OptimizedSynthesizer implements ISynthesizer {
     private List<ASTNode> predList;
     private final String[] starts = {"1", "2", "3", "x", "y", "z"};
     private int checkPtr;
+    private int[] growExprByExprPtrMax;
+    private int[] growExprByPredPtrMax;
+    private int[] growPredByExprPtrMax;
+    private int[] growPredBy1PredPtrMax;
+    private int[] growPredBy2PredPtrMax;
 
     // invoke secondly
     private void growExpr() {
@@ -65,39 +81,62 @@ public class OptimizedSynthesizer implements ISynthesizer {
         int predSize = predList.size();
         for (int i = 0; i < exprSize; ++i) {
             for (int j = i; j < exprSize; ++j) {
+                if (i < growExprByExprPtrMax[0] && j < growExprByExprPtrMax[1]) {
+                    continue;
+                }
                 growExprByExpr(exprList.get(i), exprList.get(j));
             }
         }
+        growExprByExprPtrMax[0] = growExprByExprPtrMax[1] = exprSize;
 
         for (int i = 0; i < exprSize; ++i) {
-            for (int j = i; j < exprSize; ++j) {
+            // start from i + 1 because Ite(p, expr[i], expr[i]) = expr[i]
+            for (int j = i + 1; j < exprSize; ++j) {
                 for (int k = 0; k < predSize; ++k) {
+                    if (i < growExprByPredPtrMax[0] && j < growExprByPredPtrMax[1] && k < growExprByPredPtrMax[2]) {
+                        continue;
+                    }
                     growExprByPred(predList.get(k), exprList.get(i), exprList.get(j));
                 }
             }
         }
+        growExprByPredPtrMax[0] = growExprByPredPtrMax[1] = exprSize;
+        growExprByPredPtrMax[2] = predSize;
     }
 
     //invoke firstly
-    //todo memorize the iter last time to avoid starting from 0
     private void growPred() {
         int exprSize = exprList.size();
         for (int i = 0; i < exprSize; ++i) {
             for (int j = i; j < exprSize; ++j) {
+                if (i < growPredByExprPtrMax[0] && j < growPredByExprPtrMax[1]) {
+                    continue;
+                }
                 growPredByExpr(exprList.get(i), exprList.get(j));
             }
         }
+        growPredByExprPtrMax[0] = growPredByExprPtrMax[1] = exprSize;
+
         // memorize size to avoid infinite loop as we change the list size
         int predSize = predList.size();
         for (int i = 0; i < predSize; ++i) {
+            if (i < growPredBy1PredPtrMax[0]) {
+                continue;
+            }
             growPredBy1Pred(predList.get(i));
         }
+        growPredBy1PredPtrMax[0] = predSize;
+
         for (int i = 0; i < predSize; ++i) {
-            //todo i or i + 1
-            for (int j = i; j < predSize; ++j) {
+            //start from i + 1 because And(pred[i], pred[i]) = pred[i], Or(pred[i], pred[i]) = pred[i]
+            for (int j = i + 1; j < predSize; ++j) {
+                if (i < growPredBy2PredPtrMax[0] && j < growPredBy2PredPtrMax[1]) {
+                    continue;
+                }
                 growPredBy2Pred(predList.get(i), predList.get(j));
             }
         }
+        growPredBy2PredPtrMax[0] = growPredBy2PredPtrMax[1] = predSize;
     }
 
     private void growExprByExpr(ASTNode left, ASTNode right) {
@@ -114,7 +153,7 @@ public class OptimizedSynthesizer implements ISynthesizer {
     private void growExprByPred(ASTNode pred, ASTNode left, ASTNode right) {
         List<ASTNode> newExprList = List.of(
                 new ASTNode(new Terminal("Ite"), List.of(pred, left, right)),
-                new ASTNode(new Terminal("Ite"), List.of(pred, left, right))
+                new ASTNode(new Terminal("Ite"), List.of(pred, right, left))
         );
         for (ASTNode newExpr : newExprList) {
             if (!checkExprExistsAndUpdateEqClass(newExpr)) {
