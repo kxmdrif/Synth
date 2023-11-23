@@ -5,7 +5,6 @@ import synth.cfg.NonTerminal;
 import synth.cfg.Production;
 import synth.cfg.Terminal;
 import synth.core.*;
-import synth.egg.Egg;
 import synth.util.FileUtils;
 import synth.util.Parser;
 
