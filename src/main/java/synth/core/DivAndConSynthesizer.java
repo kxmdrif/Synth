@@ -77,6 +77,22 @@ public class DivAndConSynthesizer implements ISynthesizer {
     }
 
     private boolean checkInfeasibleExamples() {
+        // check conflict examples
+        Map<String, Integer> map = new HashMap<>();
+        for (Example example : this.examples) {
+            String key = example.getInput().get("x")
+                    + "|" + example.getInput().get("y")
+                    + "|" + example.getInput().get("z");
+            Integer val = map.get(key);
+            if (val == null) {
+                map.put(key, example.getOutput());
+            } else {
+                if (val != example.getOutput()) {
+                    return true;
+                }
+            }
+        }
+        // check out of range examples
         for (Example example : this.examples) {
             int x = example.getInput().get("x");
             int y = example.getInput().get("y");
