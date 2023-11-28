@@ -1,13 +1,8 @@
 package synth.core;
 
-import synth.cfg.NonTerminal;
 import synth.cfg.Symbol;
-import synth.cfg.Terminal;
-import synth.egg.Egg;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class ASTNode {
     private final Symbol symbol;
@@ -46,19 +41,8 @@ public class ASTNode {
         }
         return builder.toString();
     }
-     public String toEggExpr() {
-        if (children.isEmpty()) return symbol.getName();
-        StringBuilder sb = new StringBuilder();
-        sb.append("(");
-        sb.append(symbol.getName());
-        for (ASTNode child : children) {
-            sb.append(" ").append(child.toEggExpr());
-        }
-        sb.append(")");
-        return sb.toString();
-     }
 
-     public int size() {
+    public int size() {
         if (children.isEmpty()) return 1;
         int size = 1;
         for (ASTNode child : children) {
@@ -66,18 +50,5 @@ public class ASTNode {
         }
         return size;
      }
-
-    public ASTNode copy() {
-        List<ASTNode> children = new ArrayList<>();
-        String rootName = this.getSymbol().getName();
-        for (ASTNode child : this.getChildren()) {
-            children.add(child.copy());
-        }
-        if (this.getSymbol().isTerminal()) {
-            return new ASTNode(new Terminal(rootName), children);
-        } else {
-            return new ASTNode(new NonTerminal(rootName), children);
-        }
-    }
 
 }
