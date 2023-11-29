@@ -18,11 +18,11 @@ public class DivAndConSynthesizer implements ISynthesizer {
     @Override
     public Program synthesize(CFG cfg, List<Example> examples) {
         ASTNode initResult = doInit(cfg, examples);
-        if (checkInfeasibleExamples()) {
-            return null;
-        }
         if (initResult != null) {
             return new Program(initResult);
+        }
+        if (checkInfeasibleExamples()) {
+            return null;
         }
 
         while (true) {

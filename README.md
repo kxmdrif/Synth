@@ -1,7 +1,15 @@
-
 ## Build
+Skip test for benchmarks which may consume too much time
 ```text
-mvn clean package
+# Windows Powershell (need add ` before -)
+mvn clean package `-Dmaven.test.skip
+# Windows CMD
+mvn clean package -Dmaven.test.skip
+
+```
+## Run benchmarks
+```text
+mvn test
 ```
 
 ## Run
